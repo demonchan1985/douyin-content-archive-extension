@@ -1,3 +1,38 @@
+const pendingDownloads = new Map();
+
+chrome.downloads.onChanged.addListener((delta) => {
+  const pending = pendingDownloads.get(delta.id);
+  if (!pending) return;
+  if (delta.bytesReceived || delta.totalBytes) {
+    const received = delta.bytesReceived?.current ?? pending.received;
+    const total = delta.totalBytes?.current ?? pending.total;
+    pending.received = received;
+    pending.total = total;
+    if (total > 0) progress(`正在下载：${pending.label}（${Math.min(100, Math.round(received / total * 100))}%）`, Math.min(100, Math.round(received / total * 100)));
+  }
+  if (delta.state?.current === "complete") finishDownload(delta.id);
+  if (delta.state?.current === "interrupted") finishDownload(delta.id, new Error(`下载中断：${delta.error?.current || "未知原因"}`));
+});
+
+function finishDownload(id, error) {
+  const pending = pendingDownloads.get(id);
+  if (!pending) return;
+  pendingDownloads.delete(id);
+  error ? pending.reject(error) : pending.resolve();
+}
+
+async function downloadFile(options, label) {
+  const id = await chrome.downloads.download(options);
+  progress(`已创建下载任务：${label}`, 0);
+  return new Promise((resolve, reject) => {
+    pendingDownloads.set(id, { label, resolve, reject, received: 0, total: 0 });
+    chrome.downloads.search({ id }).then(([download]) => {
+      if (download?.state === "complete") finishDownload(id);
+      if (download?.state === "interrupted") finishDownload(id, new Error(`下载中断：${download.error || "未知原因"}`));
+    }).catch((error) => finishDownload(id, error));
+  });
+}
+
 function isDouyinUrl(url) {
   return /^https:\/\/(?:www\.)?douyin\.com\//.test(url || "") || /^https:\/\/v\.douyin\.com\//.test(url || "");
 }
@@ -51,6 +86,7 @@ async function archive({ items, date, keyword }) {
   const root = `${safeName(date)}_${safeName(keyword)}`;
   let downloaded = 0;
   let failed = 0;
+  const errors = [];
   for (let index = 0; index < items.length; index += 1) {
     const item = items[index];
     progress(`正在读取 ${index + 1}/${items.length}：${item.title}`);
@@ -65,28 +101,32 @@ async function archive({ items, date, keyword }) {
       for (let mediaIndex = 0; mediaIndex < detail.media.length; mediaIndex += 1) {
         const media = detail.media[mediaIndex];
         try {
-          await chrome.downloads.download({ url: media, filename: `${folder}/${String(mediaIndex + 1).padStart(2, "0")}${extension(media, detail.contentType)}`, conflictAction: "uniquify", saveAs: false });
+          const filename = `${folder}/${String(mediaIndex + 1).padStart(2, "0")}${extension(media, detail.contentType)}`;
+          await downloadFile({ url: media, filename, conflictAction: "uniquify", saveAs: false }, `${index + 1}/${items.length}「${title}」媒体 ${mediaIndex + 1}/${detail.media.length}`);
           downloaded += 1;
-        } catch {
+        } catch (error) {
           failed += 1;
+          errors.push(`「${title}」媒体下载失败：${error.message || "未知原因"}`);
         }
       }
       for (let audioIndex = 0; audioIndex < detail.audio.length; audioIndex += 1) {
         const audio = detail.audio[audioIndex];
         try {
-          await chrome.downloads.download({ url: audio, filename: `${folder}/music_${String(audioIndex + 1).padStart(2, "0")}${extension(audio, "audio")}`, conflictAction: "uniquify", saveAs: false });
+          await downloadFile({ url: audio, filename: `${folder}/music_${String(audioIndex + 1).padStart(2, "0")}${extension(audio, "audio")}`, conflictAction: "uniquify", saveAs: false }, `${index + 1}/${items.length}「${title}」配乐 ${audioIndex + 1}/${detail.audio.length}`);
           downloaded += 1;
-        } catch {
+        } catch (error) {
           failed += 1;
+          errors.push(`「${title}」配乐下载失败：${error.message || "未知原因"}`);
         }
       }
     } catch (error) {
       failed += 1;
+      errors.push(`「${item.title}」读取失败：${error.message || "未知原因"}`);
       progress(`跳过「${item.title}」：${error.message || "读取失败"}`);
     }
   }
-  progress(`归档完成：${downloaded} 个媒体文件，${failed} 个未完成。`);
-  return { downloaded, failed };
+  progress(`归档完成：${downloaded} 个媒体文件，${failed} 个未完成。`, 100);
+  return { downloaded, failed, errors };
 }
 
 async function inspectItem(item) {
@@ -188,4 +228,4 @@ function downloadText(text, filename) {
 function safeName(value) { return String(value || "未命名").replace(/[\\/:*?"<>|\r\n]/g, " ").replace(/\s+/g, " ").trim().slice(0, 42) || "未命名"; }
 function extension(url, type) { const match = url.match(/\.(webp|png|jpe?g|mp3|m4a|aac|ogg|wav)(?:\?|$)/i); if (match) return `.${match[1].replace("jpeg", "jpg")}`; if (type === "video") return ".mp4"; if (type === "audio") return ".m4a"; return ".webp"; }
 function delay(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
-function progress(text) { chrome.runtime.sendMessage({ type: "archive-progress", text }).catch(() => {}); }
+function progress(text, percent) { chrome.runtime.sendMessage({ type: "archive-progress", text, percent }).catch(() => {}); }

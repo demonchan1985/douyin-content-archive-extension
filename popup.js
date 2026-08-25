@@ -9,6 +9,7 @@ const extensionApiAvailable = Boolean(globalThis.chrome?.runtime?.id && globalTh
 
 const $ = (selector) => document.querySelector(selector);
 const dateInput = $("#archive-date");
+const downloadProgress = $("#download-progress");
 const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
 dateInput.value = new Date().toLocaleDateString("en-CA");
 
@@ -232,11 +233,14 @@ $("#archive-button").addEventListener("click", async () => {
     return;
   }
   $("#archive-button").disabled = true;
+  downloadProgress.hidden = false;
+  downloadProgress.value = 0;
   setMessage("正在创建归档任务，请勿关闭浏览器…");
   const keyword = $("#page-name").textContent.split(" · ")[0] || "抖音搜索";
   try {
     const response = await chrome.runtime.sendMessage({ type: "archive", items: selectedItems, filters, date: dateInput.value, keyword });
-    setMessage(`归档完成：${response.downloaded} 个媒体文件；${response.failed} 个未能下载。`, response.failed > 0);
+    const firstError = response.errors?.[0] ? ` ${response.errors[0]}` : "";
+    setMessage(`归档完成：${response.downloaded} 个媒体文件；${response.failed} 个未能下载。${firstError}`, response.failed > 0);
   } catch (error) {
     setMessage(`归档失败：${error.message}`, true);
   } finally {
@@ -258,7 +262,13 @@ $("#clear-selection").addEventListener("click", () => {
 
 if (extensionApiAvailable) {
   chrome.runtime.onMessage.addListener((message) => {
-    if (message.type === "archive-progress") setMessage(message.text);
+    if (message.type === "archive-progress") {
+      setMessage(message.text);
+      if (Number.isFinite(message.percent)) {
+        downloadProgress.hidden = false;
+        downloadProgress.value = message.percent;
+      }
+    }
   });
 }
 
