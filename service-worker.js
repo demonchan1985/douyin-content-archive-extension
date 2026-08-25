@@ -1,4 +1,10 @@
 const pendingDownloads = new Map();
+const requestedFilenames = new Map();
+
+chrome.downloads.onDeterminingFilename.addListener((download, suggest) => {
+  const requested = requestedFilenames.get(download.url) || requestedFilenames.get(download.finalUrl);
+  suggest(requested ? { filename: requested, conflictAction: "uniquify" } : undefined);
+});
 
 chrome.downloads.onChanged.addListener((delta) => {
   const pending = pendingDownloads.get(delta.id);
@@ -18,14 +24,22 @@ function finishDownload(id, error) {
   const pending = pendingDownloads.get(id);
   if (!pending) return;
   pendingDownloads.delete(id);
+  requestedFilenames.delete(pending.url);
   error ? pending.reject(error) : pending.resolve();
 }
 
 async function downloadFile(options, label) {
-  const id = await chrome.downloads.download(options);
+  requestedFilenames.set(options.url, options.filename);
+  let id;
+  try {
+    id = await chrome.downloads.download(options);
+  } catch (error) {
+    requestedFilenames.delete(options.url);
+    throw error;
+  }
   progress(`已创建下载任务：${label}`, 0);
   return new Promise((resolve, reject) => {
-    pendingDownloads.set(id, { label, resolve, reject, received: 0, total: 0 });
+    pendingDownloads.set(id, { label, url: options.url, resolve, reject, received: 0, total: 0 });
     chrome.downloads.search({ id }).then(([download]) => {
       if (download?.state === "complete") finishDownload(id);
       if (download?.state === "interrupted") finishDownload(id, new Error(`下载中断：${download.error || "未知原因"}`));
