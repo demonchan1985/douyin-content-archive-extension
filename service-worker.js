@@ -110,7 +110,7 @@ async function archive({ items, date, keyword }) {
           errors.push(`「${title}」媒体下载失败：${error.message || "未知原因"}`);
         }
       }
-      for (let audioIndex = 0; audioIndex < detail.audio.length; audioIndex += 1) {
+      for (let audioIndex = 0; detail.contentType === "image" && audioIndex < detail.audio.length; audioIndex += 1) {
         const audio = detail.audio[audioIndex];
         try {
           await downloadFile({ url: audio, filename: `${folder}/music_${String(audioIndex + 1).padStart(2, "0")}${extension(audio, "audio")}`, conflictAction: "uniquify", saveAs: false }, `${index + 1}/${items.length}「${title}」配乐 ${audioIndex + 1}/${detail.audio.length}`);
