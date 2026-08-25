@@ -96,13 +96,14 @@ async function archive({ items, date, keyword }) {
       const title = detail.title || item.title;
       const author = detail.author || item.author;
       const folder = `${root}/${String(index + 1).padStart(3, "0")}_${item.id}_${safeName(title)}`;
-      const metadata = { source_url: detail.sourceUrl, post_id: item.id, content_type: detail.contentType, title, author, archived_at: date, media_urls: detail.media, music_urls: detail.audio };
+      const metadata = { source_url: detail.sourceUrl, post_id: item.id, content_type: detail.contentType, title, author, archived_at: date, media_urls: detail.media, video_candidates: detail.videoCandidates || [], music_urls: detail.audio };
       await downloadText(JSON.stringify(metadata, null, 2), `${folder}/metadata.json`);
       for (let mediaIndex = 0; mediaIndex < detail.media.length; mediaIndex += 1) {
         const media = detail.media[mediaIndex];
         try {
           const filename = `${folder}/${String(mediaIndex + 1).padStart(2, "0")}${extension(media, detail.contentType)}`;
-          await downloadFile({ url: media, filename, conflictAction: "uniquify", saveAs: false }, `${index + 1}/${items.length}「${title}」媒体 ${mediaIndex + 1}/${detail.media.length}`);
+          const sources = detail.contentType === "video" ? detail.videoCandidates : [media];
+          await downloadWithFallback(sources, { filename, conflictAction: "uniquify", saveAs: false }, `${index + 1}/${items.length}「${title}」媒体 ${mediaIndex + 1}/${detail.media.length}`);
           downloaded += 1;
         } catch (error) {
           failed += 1;
@@ -137,7 +138,7 @@ async function inspectItem(item) {
     await delay(2200);
     const [{ result }] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: collectDetailMedia, args: [item.id] });
     if (!result) throw new Error("未能读取作品详情");
-    return { sourceUrl: url, media: result.media || [], audio: result.audio || [], contentType: result.contentType || item.type, title: result.title || item.title, author: result.author || item.author, cover: result.cover || item.cover };
+    return { sourceUrl: url, media: result.media || [], videoCandidates: result.videoCandidates || [], audio: result.audio || [], contentType: result.contentType || item.type, title: result.title || item.title, author: result.author || item.author, cover: result.cover || item.cover };
   } finally {
     await chrome.tabs.remove(tab.id).catch(() => {});
   }
@@ -156,7 +157,8 @@ async function collectDetailMedia(awemeId) {
   const aweme = payload.aweme_detail;
   if (!aweme) throw new Error(payload.status_msg || "作品详情为空");
 
-  const firstUrl = (address) => (address?.url_list || []).find((url) => /^https:/.test(url)) || "";
+  const urls = (address) => (address?.url_list || []).filter((url) => /^https:/.test(url));
+  const firstUrl = (address) => urls(address)[0] || "";
   const deduplicate = (urls) => {
     const keys = new Set();
     return urls.filter((url) => {
@@ -168,16 +170,36 @@ async function collectDetailMedia(awemeId) {
     });
   };
   const images = deduplicate((aweme.images || []).map((image) => firstUrl(image)));
-  const video = firstUrl(aweme.video?.play_addr);
+  const videoCandidates = deduplicate([
+    ...urls(aweme.video?.play_addr_h264),
+    ...urls(aweme.video?.play_addr),
+    ...(aweme.video?.bit_rate || []).flatMap((bitRate) => [...urls(bitRate.play_addr_h264), ...urls(bitRate.play_addr)]),
+  ]).sort((left, right) => Number(/www\.douyin\.com\/aweme\/v1\/play/i.test(right)) - Number(/www\.douyin\.com\/aweme\/v1\/play/i.test(left)));
+  const video = videoCandidates[0] || "";
   const music = firstUrl(aweme.music?.play_url);
   return {
     media: images.length ? images : deduplicate([video]),
+    videoCandidates,
     audio: deduplicate([music]),
     contentType: images.length ? "image" : "video",
     title: aweme.desc || "抖音作品",
     author: aweme.author?.nickname || "未知作者",
     cover: images[0] || firstUrl(aweme.video?.cover),
   };
+}
+
+async function downloadWithFallback(urls, options, label) {
+  let lastError;
+  for (let index = 0; index < urls.length; index += 1) {
+    try {
+      if (index) progress(`正在切换备用视频地址 ${index + 1}/${urls.length}：${label}`, 0);
+      await downloadFile({ ...options, url: urls[index] }, label);
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError || new Error("没有可用的视频下载地址");
 }
 
 async function resolveSharedLink(value) {
