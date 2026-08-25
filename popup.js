@@ -388,7 +388,6 @@ async function scanSearchPage(activeFilters, scanLimit) {
   const items = [...itemsById.values()].slice(0, scanLimit);
   const format = activeFilters.format === "图文" ? "image" : activeFilters.format === "视频" ? "video" : null;
   const filtered = items.filter((item) => !format || item.type === format).filter((item) => matchesTime(item.dateText, activeFilters.time));
-  if (activeFilters.sort === "最多点赞") filtered.sort((a, b) => b.likes - a.likes);
   return { keyword, scanned: items.length, items: filtered };
 
   function matchesTime(dateText, time) {
