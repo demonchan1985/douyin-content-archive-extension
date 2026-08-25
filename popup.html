@@ -57,7 +57,12 @@
       </section>
       <button class="primary" id="scan-button" type="button">扫描当前已加载内容</button>
       <p class="message" id="message" role="status">打开抖音搜索结果页后点击扫描。</p>
-      <progress class="download-progress" id="download-progress" max="100" value="0" hidden></progress>
+      <section class="download-status" id="download-status" aria-live="polite" hidden>
+        <div class="download-status-top"><span class="download-state" id="download-state">↓</span><div><b id="download-status-title">正在归档</b><small id="download-status-detail">正在创建下载任务…</small></div><strong id="download-percent">0%</strong></div>
+        <progress id="download-progress" max="100" value="0"></progress>
+        <div class="download-status-meta"><span id="download-status-meta">0% 已完成</span><span>请保持侧栏打开</span></div>
+        <div class="download-status-done"><span id="download-done-text">✓ 归档已完成</span><button id="open-download-folder" type="button">打开下载目录 ↗</button></div>
+      </section>
 
       <section class="results" id="results" hidden>
         <div class="results-title"><strong>归档队列</strong><span id="result-count"></span></div>

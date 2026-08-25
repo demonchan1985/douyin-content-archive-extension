@@ -9,5 +9,5 @@ const archive = resolve(dist, `douyin-content-archive-v${manifest.version}.zip`)
 
 rmSync(dist, { recursive: true, force: true });
 mkdirSync(dist, { recursive: true });
-execFileSync("zip", ["-r", "-X", archive, ".", "-x", "dist/*", ".git/*", ".github/*", "scripts/*", "node_modules/*", "*/.DS_Store", ".gitignore", "README.md", "package.json", "theme-preview.html", "icons/icon-source-*.png"], { cwd: root, stdio: "inherit" });
+execFileSync("zip", ["-r", "-X", archive, ".", "-x", "dist/*", ".git/*", ".github/*", "scripts/*", "node_modules/*", "*/.DS_Store", ".gitignore", "README.md", "package.json", "*-preview.html", "icons/icon-source-*.png"], { cwd: root, stdio: "inherit" });
 console.log(`已生成：${archive}`);

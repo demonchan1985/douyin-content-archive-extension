@@ -1,5 +1,6 @@
 const pendingDownloads = new Map();
 const requestedFilenames = new Map();
+let lastArchiveDownloadId;
 
 chrome.downloads.onDeterminingFilename.addListener((download, suggest) => {
   const requested = requestedFilenames.get(download.url) || requestedFilenames.get(download.finalUrl);
@@ -25,6 +26,10 @@ function finishDownload(id, error) {
   if (!pending) return;
   pendingDownloads.delete(id);
   requestedFilenames.delete(pending.url);
+  if (!error) {
+    lastArchiveDownloadId = id;
+    chrome.storage.session.set({ lastArchiveDownloadId: id }).catch(() => {});
+  }
   error ? pending.reject(error) : pending.resolve();
 }
 
@@ -94,7 +99,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     resolveSharedLink(message.value).then(sendResponse).catch((error) => sendResponse({ error: error.message }));
     return true;
   }
+  if (message.type === "show-archive-folder") {
+    showArchiveFolder().then(sendResponse).catch((error) => sendResponse({ shown: false, error: error.message }));
+    return true;
+  }
 });
+
+async function showArchiveFolder() {
+  const { lastArchiveDownloadId: storedId } = await chrome.storage.session.get("lastArchiveDownloadId");
+  const id = lastArchiveDownloadId || storedId;
+  if (!id) throw new Error("本次归档没有可定位的媒体文件");
+  const [download] = await chrome.downloads.search({ id });
+  if (!download || download.state !== "complete") throw new Error("下载尚未完成");
+  chrome.downloads.show(id);
+  return { shown: true };
+}
 
 async function archive({ items, date, keyword }) {
   const root = `${safeName(date)}_${safeName(keyword)}`;

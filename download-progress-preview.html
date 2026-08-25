@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>下载进度预览</title>
+    <style>
+      :root { color:#f3edf7; font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; background:#17131e; }
+      * { box-sizing:border-box; }
+      body { display:grid; min-width:320px; min-height:100vh; margin:0; place-items:center; padding:24px; }
+      main { width:min(100%,440px); padding:22px; border:1px solid #44384f; border-radius:22px; background:linear-gradient(150deg,#2a2435,#211c2a); box-shadow:0 20px 45px rgba(0,0,0,.26); }
+      h1 { margin:0 0 17px; font-size:16px; }
+      .download-card { display:grid; gap:10px; padding:14px; border:1px solid #4b3b58; border-radius:16px; background:rgba(255,255,255,.035); }
+      .topline { display:flex; align-items:center; gap:9px; min-width:0; }
+      .state { display:grid; flex:0 0 auto; width:30px; height:30px; place-items:center; border-radius:10px; color:#fff; background:linear-gradient(135deg,#ff3a68,#9a56ee); font-size:15px; }
+      .copy { min-width:0; flex:1; }.copy b,.copy small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.copy b { font-size:13px; }.copy small { margin-top:3px; color:#b9aebe; font-size:11px; }
+      .percent { color:#ffa1bf; font-size:13px; font-variant-numeric:tabular-nums; }
+      progress { width:100%; height:5px; overflow:hidden; border:0; border-radius:9px; accent-color:#ef4f96; } progress::-webkit-progress-bar { background:#44364f; } progress::-webkit-progress-value { background:linear-gradient(90deg,#ff3a68,#a15bed); }
+      .meta { display:flex; justify-content:space-between; color:#b9aebe; font-size:11px; }
+      .done { display:none; align-items:center; justify-content:space-between; gap:10px; padding-top:2px; }.done span { color:#9adfc0; font-size:12px; }.done button { padding:8px 10px; border:1px solid #5a4768; border-radius:9px; color:#e6d3f5; cursor:pointer; background:#332a40; font-size:11px; font-weight:650; }.done button:hover { background:#41334f; }
+      .download-card.completed .state { background:#167c58; }.download-card.completed progress,.download-card.completed .meta { display:none; }.download-card.completed .done { display:flex; }
+      .demo-controls { display:flex; gap:8px; margin-top:17px; }.demo-controls button { flex:1; padding:8px; border:1px solid #4b3b58; border-radius:9px; color:#d8c6e7; cursor:pointer; background:transparent; font-size:11px; }.demo-controls button:hover { background:#332a40; }
+      .note { margin:17px 0 0; color:#a99bb2; font-size:11px; line-height:1.6; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>归档队列</h1>
+      <section class="download-card" id="download-card">
+        <div class="topline">
+          <span class="state" id="state">↓</span>
+          <div class="copy"><b id="title">正在下载第 3 / 20 条</b><small id="detail">夏日棒球帽穿搭.mp4</small></div>
+          <strong class="percent" id="percent">64%</strong>
+        </div>
+        <progress id="progress" value="64" max="100"></progress>
+        <div class="meta"><span id="speed">12.4 MB / 19.3 MB</span><span>请保持侧栏打开</span></div>
+        <div class="done"><span id="done-text">✓ 已完成：20 个媒体文件</span><button type="button" id="open-folder">打开下载目录 ↗</button></div>
+      </section>
+      <div class="demo-controls"><button type="button" id="show-progress">预览下载中</button><button type="button" id="show-done">预览已完成</button></div>
+      <p class="note">完成前只保留一张紧凑状态卡；完成后隐藏进度条，直接提供“打开下载目录”。正式插件中该按钮会打开本次归档的下载位置。</p>
+    </main>
+    <script>
+      const card = document.querySelector("#download-card");
+      const title = document.querySelector("#title");
+      const detail = document.querySelector("#detail");
+      const percent = document.querySelector("#percent");
+      const progress = document.querySelector("#progress");
+      document.querySelector("#show-progress").onclick = () => { card.classList.remove("completed"); title.textContent = "正在下载第 3 / 20 条"; detail.textContent = "夏日棒球帽穿搭.mp4"; percent.textContent = "64%"; progress.value = 64; };
+      document.querySelector("#show-done").onclick = () => { card.classList.add("completed"); title.textContent = "归档已完成"; detail.textContent = "20 条内容已处理"; };
+      document.querySelector("#open-folder").onclick = () => alert("正式插件中：打开本次归档的下载目录");
+    </script>
+  </body>
+</html>

@@ -10,6 +10,7 @@ const extensionApiAvailable = Boolean(globalThis.chrome?.runtime?.id && globalTh
 const $ = (selector) => document.querySelector(selector);
 const dateInput = $("#archive-date");
 const downloadProgress = $("#download-progress");
+const downloadStatus = $("#download-status");
 const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
 dateInput.value = new Date().toLocaleDateString("en-CA");
 
@@ -53,8 +54,31 @@ async function restoreLastFilters() {
 
 function setMessage(message, error = false) {
   const target = $("#message");
+  target.hidden = false;
   target.textContent = message;
   target.classList.toggle("error", error);
+}
+
+function showDownloadProgress(detail, percent = 0) {
+  $("#message").hidden = true;
+  downloadStatus.hidden = false;
+  downloadStatus.classList.remove("completed");
+  $("#download-state").textContent = "↓";
+  $("#download-status-title").textContent = "正在归档";
+  $("#download-status-detail").textContent = detail;
+  $("#download-percent").textContent = `${percent}%`;
+  $("#download-status-meta").textContent = `${percent}% 已完成`;
+  downloadProgress.value = percent;
+}
+
+function showDownloadComplete(response) {
+  downloadStatus.hidden = false;
+  downloadStatus.classList.add("completed");
+  $("#download-state").textContent = "✓";
+  $("#download-status-title").textContent = response.failed ? "归档完成（部分失败）" : "归档已完成";
+  $("#download-status-detail").textContent = `${response.downloaded} 个媒体文件 · ${response.failed} 个未下载`;
+  $("#download-done-text").textContent = `✓ 已完成：${response.downloaded} 个媒体文件`;
+  $("#open-download-folder").disabled = !response.downloaded;
 }
 
 function renderResults(items) {
@@ -239,18 +263,28 @@ $("#archive-button").addEventListener("click", async () => {
     return;
   }
   $("#archive-button").disabled = true;
-  downloadProgress.hidden = false;
-  downloadProgress.value = 0;
-  setMessage("正在创建归档任务，请勿关闭浏览器…");
+  showDownloadProgress("正在创建下载任务…");
   const keyword = $("#page-name").textContent.split(" · ")[0] || "抖音搜索";
   try {
     const response = await chrome.runtime.sendMessage({ type: "archive", items: selectedItems, filters, date: dateInput.value, keyword });
     const firstError = response.errors?.[0] ? ` ${response.errors[0]}` : "";
-    setMessage(`归档完成：${response.downloaded} 个媒体文件；${response.failed} 个未能下载。${firstError}`, response.failed > 0);
+    showDownloadComplete(response);
+    if (response.failed) setMessage(`部分内容未下载。${firstError}`, true);
   } catch (error) {
+    $("#message").hidden = false;
     setMessage(`归档失败：${error.message}`, true);
   } finally {
     $("#archive-button").disabled = false;
+  }
+});
+
+$("#open-download-folder").addEventListener("click", async () => {
+  try {
+    const response = await chrome.runtime.sendMessage({ type: "show-archive-folder" });
+    if (!response?.shown) throw new Error(response?.error || "未找到本次下载文件");
+  } catch (error) {
+    $("#message").hidden = false;
+    setMessage(`无法打开下载目录：${error.message}`, true);
   }
 });
 
@@ -269,10 +303,8 @@ $("#clear-selection").addEventListener("click", () => {
 if (extensionApiAvailable) {
   chrome.runtime.onMessage.addListener((message) => {
     if (message.type === "archive-progress") {
-      setMessage(message.text);
       if (Number.isFinite(message.percent)) {
-        downloadProgress.hidden = false;
-        downloadProgress.value = message.percent;
+        showDownloadProgress(message.text, message.percent);
       }
     }
   });
