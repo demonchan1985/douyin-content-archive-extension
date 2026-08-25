@@ -43,12 +43,9 @@ async function restoreLastFilters() {
   if (!extensionApiAvailable) return;
   const stored = await chrome.storage.local.get([filterStorageKey, "lastSort"]);
   const lastFilters = stored[filterStorageKey] || (stored.lastSort ? { sort: stored.lastSort } : null);
-  if (!lastFilters) return;
-  Object.entries(filters).forEach(([group]) => {
+  if (lastFilters) Object.entries(filters).forEach(([group]) => {
     const value = lastFilters[group];
-    if (value && document.querySelector(`.options button[data-group="${group}"][data-value="${value}"]`)) {
-      filters[group] = value;
-    }
+    if (value && document.querySelector(`.options button[data-group="${group}"][data-value="${value}"]`)) filters[group] = value;
   });
   updateFilterButtons();
   updateSummary();
@@ -132,8 +129,17 @@ document.querySelectorAll(".options button").forEach((option) => {
   });
 });
 
-restoreLastFilters().catch((error) => setMessage(`无法恢复上次筛选：${error.message}`, true));
-restoreTheme().catch((error) => setMessage(`无法恢复皮肤设置：${error.message}`, true));
+async function initializePanel() {
+  await Promise.all([restoreLastFilters(), restoreTheme()]);
+  if (!extensionApiAvailable) return;
+  try {
+    await syncFiltersToCurrentSearchPage();
+  } catch (error) {
+    setMessage(`网页筛选未同步：${error.message}`, true);
+  }
+}
+
+initializePanel().catch((error) => setMessage(`初始化失败：${error.message}`, true));
 
 $("#open-download-settings").addEventListener("click", async () => {
   if (!extensionApiAvailable) {
