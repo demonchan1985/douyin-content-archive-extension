@@ -94,6 +94,7 @@ async function archive({ items, date, keyword }) {
       const detail = await inspectItem(item);
       if (!detail.media.length) throw new Error("未从作品详情中读取到可下载媒体");
       const title = detail.title || item.title;
+      const fileTitle = safeName(title);
       const author = detail.author || item.author;
       const folder = `${root}/${String(index + 1).padStart(3, "0")}_${item.id}_${safeName(title)}`;
       const metadata = { source_url: detail.sourceUrl, post_id: item.id, content_type: detail.contentType, title, author, archived_at: date, media_urls: detail.media, video_candidates: detail.videoCandidates || [], music_urls: detail.audio };
@@ -101,7 +102,8 @@ async function archive({ items, date, keyword }) {
       for (let mediaIndex = 0; mediaIndex < detail.media.length; mediaIndex += 1) {
         const media = detail.media[mediaIndex];
         try {
-          const filename = `${folder}/${String(mediaIndex + 1).padStart(2, "0")}${extension(media, detail.contentType)}`;
+          const suffix = detail.contentType === "video" ? "" : `_${String(mediaIndex + 1).padStart(2, "0")}`;
+          const filename = `${folder}/${fileTitle}${suffix}${extension(media, detail.contentType)}`;
           const sources = detail.contentType === "video" ? detail.videoCandidates : [media];
           await downloadWithFallback(sources, { filename, conflictAction: "uniquify", saveAs: false }, `${index + 1}/${items.length}「${title}」媒体 ${mediaIndex + 1}/${detail.media.length}`);
           downloaded += 1;
@@ -113,7 +115,7 @@ async function archive({ items, date, keyword }) {
       for (let audioIndex = 0; detail.contentType === "image" && audioIndex < detail.audio.length; audioIndex += 1) {
         const audio = detail.audio[audioIndex];
         try {
-          await downloadFile({ url: audio, filename: `${folder}/music_${String(audioIndex + 1).padStart(2, "0")}${extension(audio, "audio")}`, conflictAction: "uniquify", saveAs: false }, `${index + 1}/${items.length}「${title}」配乐 ${audioIndex + 1}/${detail.audio.length}`);
+          await downloadFile({ url: audio, filename: `${folder}/${fileTitle}_配乐_${String(audioIndex + 1).padStart(2, "0")}${extension(audio, "audio")}`, conflictAction: "uniquify", saveAs: false }, `${index + 1}/${items.length}「${title}」配乐 ${audioIndex + 1}/${detail.audio.length}`);
           downloaded += 1;
         } catch (error) {
           failed += 1;
