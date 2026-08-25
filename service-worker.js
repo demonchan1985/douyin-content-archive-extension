@@ -131,7 +131,8 @@ async function archive({ items, date, keyword }) {
       const author = detail.author || item.author;
       const folder = `${root}/${String(index + 1).padStart(3, "0")}_${item.id}_${safeName(title)}`;
       const metadata = { source_url: detail.sourceUrl, post_id: item.id, content_type: detail.contentType, title, author, archived_at: date, media_urls: detail.media, video_candidates: detail.videoCandidates || [], music_urls: detail.audio };
-      await downloadText(JSON.stringify(metadata, null, 2), `${folder}/metadata.json`);
+      const metadataUrl = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(metadata, null, 2))}`;
+      await downloadFile({ url: metadataUrl, filename: `${folder}/${fileTitle}_信息.json`, conflictAction: "uniquify", saveAs: false }, `${index + 1}/${items.length}「${title}」信息`);
       for (let mediaIndex = 0; mediaIndex < detail.media.length; mediaIndex += 1) {
         const media = detail.media[mediaIndex];
         try {
