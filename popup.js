@@ -1,6 +1,7 @@
 const filters = { sort: "最多点赞", time: "不限时间", scope: "不限范围", duration: "不限时长", format: "不限" };
 const filterStorageKey = "lastFilters";
 const themeStorageKey = "themeMode";
+const scanLimitStorageKey = "scanLimit";
 let scannedItems = [];
 let selectedIds = new Set();
 let pageSyncTask = Promise.resolve();
@@ -12,6 +13,8 @@ const dateInput = $("#archive-date");
 const downloadProgress = $("#download-progress");
 const downloadStatus = $("#download-status");
 const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
+const scanLimitSelect = $("#scan-limit");
+const scanLimitCustom = $("#scan-limit-custom");
 dateInput.value = new Date().toLocaleDateString("en-CA");
 
 function applyTheme(mode) {
@@ -50,6 +53,32 @@ async function restoreLastFilters() {
   });
   updateFilterButtons();
   updateSummary();
+}
+
+function getScanLimit() {
+  const value = scanLimitSelect.value === "custom" ? Number(scanLimitCustom.value) : Number(scanLimitSelect.value);
+  if (!Number.isInteger(value) || value < 1 || value > 500) throw new Error("扫描数量请输入 1–500 之间的整数");
+  return value;
+}
+
+function updateScanLimit() {
+  const custom = scanLimitSelect.value === "custom";
+  scanLimitCustom.hidden = !custom;
+  const limit = custom ? Number(scanLimitCustom.value) || 50 : Number(scanLimitSelect.value);
+  $("#scan-button").textContent = `扫描前 ${limit} 条内容`;
+}
+
+async function restoreScanLimit() {
+  if (!extensionApiAvailable) return;
+  const { [scanLimitStorageKey]: saved } = await chrome.storage.local.get(scanLimitStorageKey);
+  if (Number.isInteger(saved) && saved >= 1 && saved <= 500) {
+    if (document.querySelector(`#scan-limit option[value="${saved}"]`)) scanLimitSelect.value = String(saved);
+    else {
+      scanLimitSelect.value = "custom";
+      scanLimitCustom.value = saved;
+    }
+  }
+  updateScanLimit();
 }
 
 function setMessage(message, error = false) {
@@ -154,7 +183,7 @@ document.querySelectorAll(".options button").forEach((option) => {
 });
 
 async function initializePanel() {
-  await Promise.all([restoreLastFilters(), restoreTheme()]);
+  await Promise.all([restoreLastFilters(), restoreTheme(), restoreScanLimit()]);
   if (!extensionApiAvailable) return;
   try {
     await syncFiltersToCurrentSearchPage();
@@ -164,6 +193,17 @@ async function initializePanel() {
 }
 
 initializePanel().catch((error) => setMessage(`初始化失败：${error.message}`, true));
+
+scanLimitSelect.addEventListener("change", () => {
+  updateScanLimit();
+  if (scanLimitSelect.value !== "custom" && extensionApiAvailable) chrome.storage.local.set({ [scanLimitStorageKey]: Number(scanLimitSelect.value) });
+});
+
+scanLimitCustom.addEventListener("change", () => {
+  updateScanLimit();
+  const value = Number(scanLimitCustom.value);
+  if (Number.isInteger(value) && value >= 1 && value <= 500 && extensionApiAvailable) chrome.storage.local.set({ [scanLimitStorageKey]: value });
+});
 
 $("#open-download-settings").addEventListener("click", async () => {
   if (!extensionApiAvailable) {
@@ -212,6 +252,13 @@ $("#scan-button").addEventListener("click", async () => {
     setMessage("这是本地预览页。请在 chrome://extensions 加载扩展后，打开抖音搜索页再扫描。", true);
     return;
   }
+  let scanLimit;
+  try {
+    scanLimit = getScanLimit();
+  } catch (error) {
+    setMessage(error.message, true);
+    return;
+  }
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id || !tab.url?.startsWith("https://www.douyin.com/")) {
     setMessage("请先打开抖音搜索结果页，再扫描。", true);
@@ -222,9 +269,9 @@ $("#scan-button").addEventListener("click", async () => {
   try {
     const syncResult = await syncFiltersToCurrentSearchPage();
     if (!syncResult.synced) throw new Error(syncResult.error || "当前网页未能同步筛选");
-    setMessage("网页筛选已同步，正在读取当前已加载内容…");
+    setMessage(`网页筛选已同步，正在读取前 ${scanLimit} 条内容…`);
     await wait(700);
-    const [{ result }] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: scanSearchPage, args: [filters] });
+    const [{ result }] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: scanSearchPage, args: [filters, scanLimit] });
     scannedItems = result.items;
     $("#page-name").textContent = `${result.keyword} · 当前搜索页`;
     $("#root-name").textContent = `${dateInput.value}_${result.keyword}`;
@@ -234,7 +281,7 @@ $("#scan-button").addEventListener("click", async () => {
       return;
     }
     renderResults(scannedItems);
-    setMessage(`已找到 ${scannedItems.length} 条内容，确认后开始下载。`);
+    setMessage(`已扫描 ${result.scanned} 条，符合筛选 ${scannedItems.length} 条；确认后开始下载。`);
   } catch (error) {
     setMessage(`扫描失败：${error.message}`, true);
   } finally {
@@ -310,10 +357,10 @@ if (extensionApiAvailable) {
   });
 }
 
-function scanSearchPage(activeFilters) {
-  const cards = [...document.querySelectorAll('[id^="waterfall_item_"]')];
+async function scanSearchPage(activeFilters, scanLimit) {
   const keyword = document.querySelector('[data-e2e="searchbar-input"]')?.value?.trim() || "抖音搜索";
-  const items = cards.map((card) => {
+  const itemsById = new Map();
+  const collectCards = () => [...document.querySelectorAll('[id^="waterfall_item_"]')].forEach((card) => {
     const id = card.id.replace("waterfall_item_", "");
     const text = (card.innerText || "").trim();
     const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
@@ -323,12 +370,26 @@ function scanSearchPage(activeFilters) {
     const dateText = lines.find((line) => /刚刚|分钟前|小时前|天前|月前|年|月\d+日/.test(line)) || "";
     const likes = Number((text.match(/(\d+(?:\.\d+)?)(万)?/) || [0, 0, ""])[1]) * ((text.match(/(\d+(?:\.\d+)?)(万)?/) || [0, 0, ""])[2] === "万" ? 10000 : 1);
     const cover = card.querySelector('img[src*="douyinpic"], img[src*="byteimg"]')?.currentSrc || "";
-    return { id, type, title, author: authorLine.replace(/^@/, ""), dateText, likes, cover };
-  }).filter((item) => /^\d+$/.test(item.id));
+    if (/^\d+$/.test(id)) itemsById.set(id, { id, type, title, author: authorLine.replace(/^@/, ""), dateText, likes, cover });
+  });
+  const waitFor = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+  const originalY = window.scrollY;
+  let stalled = 0;
+  while (itemsById.size < scanLimit && stalled < 4) {
+    const previousCount = itemsById.size;
+    collectCards();
+    if (itemsById.size >= scanLimit) break;
+    window.scrollBy({ top: Math.max(window.innerHeight, 720), behavior: "auto" });
+    await waitFor(700);
+    collectCards();
+    stalled = itemsById.size > previousCount ? 0 : stalled + 1;
+  }
+  window.scrollTo({ top: originalY, behavior: "auto" });
+  const items = [...itemsById.values()].slice(0, scanLimit);
   const format = activeFilters.format === "图文" ? "image" : activeFilters.format === "视频" ? "video" : null;
   const filtered = items.filter((item) => !format || item.type === format).filter((item) => matchesTime(item.dateText, activeFilters.time));
   if (activeFilters.sort === "最多点赞") filtered.sort((a, b) => b.likes - a.likes);
-  return { keyword, items: filtered };
+  return { keyword, scanned: items.length, items: filtered };
 
   function matchesTime(dateText, time) {
     if (time === "不限时间") return true;
