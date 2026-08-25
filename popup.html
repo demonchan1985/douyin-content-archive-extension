@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>抖音内容归档</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="popup">
+      <header class="header">
+        <div class="brand">
+          <div class="brand-mark">↓</div>
+          <div><h1>抖音内容归档</h1><p id="page-name">等待扫描当前页面</p></div>
+        </div>
+        <span class="status">已连接</span>
+      </header>
+
+      <section class="theme-settings" aria-label="界面皮肤">
+        <span>界面皮肤</span>
+        <div class="theme-options" role="group" aria-label="选择界面皮肤">
+          <button class="selected" data-theme="system" type="button">◐ 跟随系统</button>
+          <button data-theme="light" type="button">☀ 浅色</button>
+          <button data-theme="dark" type="button">☾ 深色</button>
+        </div>
+      </section>
+
+      <button class="filter-toggle" id="filter-toggle" type="button" aria-expanded="true" aria-controls="filter-panel">
+        <span>筛选</span><span id="filter-summary">不限 · 最多点赞 · 不限时间</span><span class="caret">⌃</span>
+      </button>
+      <section class="filter-panel" id="filter-panel" aria-label="归档筛选">
+        <fieldset><legend>排序依据</legend><div class="options">
+          <button data-group="sort" data-value="综合排序">综合排序</button><button data-group="sort" data-value="最新发布">最新发布</button><button class="selected" data-group="sort" data-value="最多点赞">最多点赞</button>
+        </div></fieldset>
+        <fieldset><legend>发布时间</legend><div class="options">
+          <button class="selected" data-group="time" data-value="不限时间">不限</button><button data-group="time" data-value="一天内">一天内</button><button data-group="time" data-value="一周内">一周内</button><button data-group="time" data-value="半年内">半年内</button>
+        </div></fieldset>
+        <fieldset><legend>搜索范围</legend><div class="options">
+          <button class="selected" data-group="scope" data-value="不限范围">不限</button><button data-group="scope" data-value="关注的人">关注的人</button><button data-group="scope" data-value="最近看过">最近看过</button><button data-group="scope" data-value="还未看过">还未看过</button>
+        </div></fieldset>
+        <fieldset><legend>视频时长</legend><div class="options">
+          <button class="selected" data-group="duration" data-value="不限时长">不限</button><button data-group="duration" data-value="1分钟以下">1分钟以下</button><button data-group="duration" data-value="1–5分钟">1–5分钟</button><button data-group="duration" data-value="5分钟以上">5分钟以上</button>
+        </div><p>仅对视频生效；选择图文时自动忽略。</p></fieldset>
+        <fieldset><legend>内容形式</legend><div class="options">
+          <button class="selected" data-group="format" data-value="不限">不限</button><button data-group="format" data-value="视频">视频</button><button data-group="format" data-value="图文">图文</button>
+        </div><p>图文下载原图及配套音乐；视频下载页面可取得的原始媒体地址。</p></fieldset>
+      </section>
+
+      <section class="settings">
+        <label>归档日期<input id="archive-date" type="date" /></label>
+        <label>下载目录<div class="directory-row"><span class="directory">📁 Downloads/<span id="root-name">日期_搜索词</span></span><button class="directory-setting" id="open-download-settings" type="button">选择位置</button></div></label>
+      </section>
+      <section class="link-download" aria-label="链接下载">
+        <label for="shared-link">链接下载</label>
+        <div class="link-row"><input id="shared-link" type="url" inputmode="url" placeholder="粘贴抖音作品链接或分享文案" /><button id="read-clipboard" type="button">读取剪贴板</button></div>
+        <button class="link-parse" id="parse-link" type="button">解析链接并加入下载队列</button>
+      </section>
+      <button class="primary" id="scan-button" type="button">扫描当前已加载内容</button>
+      <p class="message" id="message" role="status">打开抖音搜索结果页后点击扫描。</p>
+
+      <section class="results" id="results" hidden>
+        <div class="results-title"><strong>归档队列</strong><span id="result-count"></span></div>
+        <div class="selection-actions">
+          <button id="select-all" type="button">全选</button>
+          <button id="clear-selection" type="button">全取消</button>
+        </div>
+        <div class="result-list" id="result-list"></div>
+        <button class="primary archive" id="archive-button" type="button">下载已选内容</button>
+      </section>
+      <footer>下载内容仅供个人整理使用</footer>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

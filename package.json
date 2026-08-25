@@ -1,0 +1,9 @@
+{
+  "name": "douyin-content-archive-extension",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "check": "node scripts/check-release.mjs",
+    "package": "node scripts/package-extension.mjs"
+  }
+}
