@@ -4,7 +4,7 @@ let lastArchiveDownloadId;
 
 chrome.downloads.onDeterminingFilename.addListener((download, suggest) => {
   const requested = requestedFilenames.get(download.url) || requestedFilenames.get(download.finalUrl);
-  suggest(requested ? { filename: requested, conflictAction: "uniquify" } : undefined);
+  if (requested) suggest({ filename: requested, conflictAction: "uniquify" });
 });
 
 chrome.downloads.onChanged.addListener((delta) => {
