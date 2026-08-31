@@ -96,7 +96,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
   if (message.type === "resolve-link") {
-    resolveSharedLink(message.value).then(sendResponse).catch((error) => sendResponse({ error: error.message }));
+    resolveSharedLink(message.value, message.tabId).then(sendResponse).catch((error) => sendResponse({ error: error.message }));
     return true;
   }
   if (message.type === "show-archive-folder") {
@@ -166,9 +166,9 @@ async function archive({ items, date, keyword }) {
   return { downloaded, failed, errors };
 }
 
-async function inspectItem(item) {
+async function inspectItem(item, existingTabId) {
   const url = `https://www.douyin.com/${item.type === "image" ? "note" : "video"}/${item.id}`;
-  const tab = await chrome.tabs.create({ url, active: false });
+  const tab = existingTabId ? await chrome.tabs.get(existingTabId) : await chrome.tabs.create({ url, active: false });
   try {
     await waitForLoad(tab.id);
     await delay(2200);
@@ -176,7 +176,7 @@ async function inspectItem(item) {
     if (!result) throw new Error("未能读取作品详情");
     return { sourceUrl: url, media: result.media || [], videoCandidates: result.videoCandidates || [], audio: result.audio || [], contentType: result.contentType || item.type, title: result.title || item.title, author: result.author || item.author, cover: result.cover || item.cover };
   } finally {
-    await chrome.tabs.remove(tab.id).catch(() => {});
+    if (!existingTabId) await chrome.tabs.remove(tab.id).catch(() => {});
   }
 }
 
@@ -238,7 +238,7 @@ async function downloadWithFallback(urls, options, label) {
   throw lastError || new Error("没有可用的视频下载地址");
 }
 
-async function resolveSharedLink(value) {
+async function resolveSharedLink(value, existingTabId) {
   const sharedUrl = extractUrl(value);
   if (!sharedUrl) throw new Error("未找到有效的抖音链接");
   let parsed = parseAwemeUrl(sharedUrl);
@@ -254,7 +254,7 @@ async function resolveSharedLink(value) {
     }
   }
   if (!parsed) throw new Error("链接未跳转到可识别的抖音图文或视频作品");
-  const detail = await inspectItem(parsed);
+  const detail = await inspectItem(parsed, existingTabId);
   if (!detail.media.length) throw new Error("作品未提供可下载媒体");
   return { item: { id: parsed.id, type: detail.contentType, title: detail.title, author: detail.author, cover: detail.cover } };
 }

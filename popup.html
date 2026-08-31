@@ -55,7 +55,7 @@
         <div class="link-row"><input id="shared-link" type="url" inputmode="url" placeholder="粘贴抖音作品链接或分享文案" /><button id="read-clipboard" type="button">读取剪贴板</button></div>
         <button class="link-parse" id="parse-link" type="button">解析链接并加入下载队列</button>
       </section>
-      <div class="scan-row">
+      <div class="scan-row" id="scan-limit-row">
         <label for="scan-limit">扫描数量<select id="scan-limit"><option value="10">前 10 条</option><option value="20">前 20 条</option><option value="30">前 30 条</option><option value="50" selected>前 50 条</option><option value="100">前 100 条</option><option value="custom">自定义</option></select></label>
         <input id="scan-limit-custom" type="number" min="1" max="500" placeholder="1–500" hidden />
       </div>

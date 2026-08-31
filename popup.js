@@ -185,6 +185,11 @@ document.querySelectorAll(".options button").forEach((option) => {
 async function initializePanel() {
   await Promise.all([restoreLastFilters(), restoreTheme(), restoreScanLimit()]);
   if (!extensionApiAvailable) return;
+  const singleItem = await updateScanMode();
+  if (singleItem) {
+    setMessage("点击“识别当前作品”即可加入下载队列。");
+    return;
+  }
   try {
     await syncFiltersToCurrentSearchPage();
   } catch (error) {
@@ -193,6 +198,19 @@ async function initializePanel() {
 }
 
 initializePanel().catch((error) => setMessage(`初始化失败：${error.message}`, true));
+
+function isSingleAwemePage(url) {
+  return /^https:\/\/(?:www\.)?douyin\.com\/(?:note|video)\/\d+/i.test(url || "");
+}
+
+async function updateScanMode() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const singleItem = isSingleAwemePage(tab?.url);
+  $("#scan-limit-row").hidden = singleItem;
+  if (singleItem) $("#scan-button").textContent = "识别当前作品";
+  else updateScanLimit();
+  return singleItem;
+}
 
 scanLimitSelect.addEventListener("change", () => {
   updateScanLimit();
@@ -261,12 +279,23 @@ $("#scan-button").addEventListener("click", async () => {
   }
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id || !tab.url?.startsWith("https://www.douyin.com/")) {
-    setMessage("请先打开抖音搜索结果页，再扫描。", true);
+    setMessage("请先打开抖音搜索结果页或单个作品页，再扫描。", true);
     return;
   }
   $("#scan-button").disabled = true;
-  setMessage("正在校验并同步网页筛选…");
   try {
+    if (isSingleAwemePage(tab.url)) {
+      setMessage("正在识别当前作品…");
+      const response = await chrome.runtime.sendMessage({ type: "resolve-link", value: tab.url, tabId: tab.id });
+      if (!response?.item) throw new Error(response?.error || "未识别到可下载作品");
+      scannedItems = [response.item];
+      $("#page-name").textContent = "单个作品 · 当前页面";
+      $("#root-name").textContent = `${dateInput.value}_单个作品`;
+      renderResults(scannedItems);
+      setMessage("已识别当前作品，确认勾选后点击下载已选内容。");
+      return;
+    }
+    setMessage("正在校验并同步网页筛选…");
     const syncResult = await syncFiltersToCurrentSearchPage();
     if (!syncResult.synced) throw new Error(syncResult.error || "当前网页未能同步筛选");
     setMessage(`网页筛选已同步，正在读取前 ${scanLimit} 条内容…`);
