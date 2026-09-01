@@ -2,10 +2,12 @@ const filters = { sort: "最多点赞", time: "不限时间", scope: "不限范�
 const filterStorageKey = "lastFilters";
 const themeStorageKey = "themeMode";
 const scanLimitStorageKey = "scanLimit";
+const videoDownloadModeStorageKey = "videoDownloadMode";
 let scannedItems = [];
 let selectedIds = new Set();
 let pageSyncTask = Promise.resolve();
 let themeMode = "system";
+let videoDownloadMode = "video";
 const extensionApiAvailable = Boolean(globalThis.chrome?.runtime?.id && globalThis.chrome?.storage?.local);
 
 const $ = (selector) => document.querySelector(selector);
@@ -79,6 +81,20 @@ async function restoreScanLimit() {
     }
   }
   updateScanLimit();
+}
+
+function updateVideoDownloadButtons() {
+  document.querySelectorAll("[data-video-download-mode]").forEach((button) => {
+    button.classList.toggle("selected", button.dataset.videoDownloadMode === videoDownloadMode);
+  });
+}
+
+async function restoreVideoDownloadMode() {
+  if (extensionApiAvailable) {
+    const { [videoDownloadModeStorageKey]: storedMode } = await chrome.storage.local.get(videoDownloadModeStorageKey);
+    if (["video", "both", "audio"].includes(storedMode)) videoDownloadMode = storedMode;
+  }
+  updateVideoDownloadButtons();
 }
 
 function setMessage(message, error = false) {
@@ -171,7 +187,7 @@ systemTheme.addEventListener("change", () => {
   if (themeMode === "system") applyTheme("system");
 });
 
-document.querySelectorAll(".options button").forEach((option) => {
+document.querySelectorAll(".options button[data-group]").forEach((option) => {
   option.addEventListener("click", () => {
     const { group, value } = option.dataset;
     filters[group] = value;
@@ -183,7 +199,7 @@ document.querySelectorAll(".options button").forEach((option) => {
 });
 
 async function initializePanel() {
-  await Promise.all([restoreLastFilters(), restoreTheme(), restoreScanLimit()]);
+  await Promise.all([restoreLastFilters(), restoreTheme(), restoreScanLimit(), restoreVideoDownloadMode()]);
   if (!extensionApiAvailable) return;
   const singleItem = await updateScanMode();
   if (singleItem) {
@@ -221,6 +237,14 @@ scanLimitCustom.addEventListener("change", () => {
   updateScanLimit();
   const value = Number(scanLimitCustom.value);
   if (Number.isInteger(value) && value >= 1 && value <= 500 && extensionApiAvailable) chrome.storage.local.set({ [scanLimitStorageKey]: value });
+});
+
+document.querySelectorAll("[data-video-download-mode]").forEach((button) => {
+  button.addEventListener("click", () => {
+    videoDownloadMode = button.dataset.videoDownloadMode;
+    updateVideoDownloadButtons();
+    if (extensionApiAvailable) chrome.storage.local.set({ [videoDownloadModeStorageKey]: videoDownloadMode });
+  });
 });
 
 $("#open-download-settings").addEventListener("click", async () => {
@@ -342,7 +366,7 @@ $("#archive-button").addEventListener("click", async () => {
   showDownloadProgress("正在创建下载任务…");
   const keyword = $("#page-name").textContent.split(" · ")[0] || "抖音搜索";
   try {
-    const response = await chrome.runtime.sendMessage({ type: "archive", items: selectedItems, filters, date: dateInput.value, keyword });
+    const response = await chrome.runtime.sendMessage({ type: "archive", items: selectedItems, filters, date: dateInput.value, keyword, videoDownloadMode });
     const firstError = response.errors?.[0] ? ` ${response.errors[0]}` : "";
     showDownloadComplete(response);
     if (response.failed) setMessage(`部分内容未下载。${firstError}`, true);

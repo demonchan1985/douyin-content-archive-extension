@@ -115,7 +115,7 @@ async function showArchiveFolder() {
   return { shown: true };
 }
 
-async function archive({ items, date, keyword }) {
+async function archive({ items, date, keyword, videoDownloadMode = "video" }) {
   const root = `${safeName(date)}_${safeName(keyword)}`;
   let downloaded = 0;
   let failed = 0;
@@ -125,15 +125,19 @@ async function archive({ items, date, keyword }) {
     progress(`正在读取 ${index + 1}/${items.length}：${item.title}`);
     try {
       const detail = await inspectItem(item);
-      if (!detail.media.length) throw new Error("未从作品详情中读取到可下载媒体");
+      const isVideo = detail.contentType === "video";
+      const downloadVideo = !isVideo || videoDownloadMode !== "audio";
+      const downloadAudio = !isVideo || videoDownloadMode !== "video";
+      if (downloadVideo && !detail.media.length) throw new Error("未从作品详情中读取到可下载媒体");
+      if (isVideo && downloadAudio && !detail.audio.length) throw new Error("作品未提供可单独下载的音频");
       const title = detail.title || item.title;
       const fileTitle = safeName(title);
       const author = detail.author || item.author;
       const folder = `${root}/${String(index + 1).padStart(3, "0")}_${item.id}_${safeName(title)}`;
-      const metadata = { source_url: detail.sourceUrl, post_id: item.id, content_type: detail.contentType, title, author, archived_at: date, media_urls: detail.media, video_candidates: detail.videoCandidates || [], music_urls: detail.audio };
+      const metadata = { source_url: detail.sourceUrl, post_id: item.id, content_type: detail.contentType, title, author, archived_at: date, video_download_mode: isVideo ? videoDownloadMode : "image_with_music", media_urls: detail.media, video_candidates: detail.videoCandidates || [], music_urls: detail.audio };
       const metadataUrl = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(metadata, null, 2))}`;
       await downloadFile({ url: metadataUrl, filename: `${folder}/${fileTitle}_信息.json`, conflictAction: "uniquify", saveAs: false }, `${index + 1}/${items.length}「${title}」信息`);
-      for (let mediaIndex = 0; mediaIndex < detail.media.length; mediaIndex += 1) {
+      for (let mediaIndex = 0; downloadVideo && mediaIndex < detail.media.length; mediaIndex += 1) {
         const media = detail.media[mediaIndex];
         try {
           const suffix = detail.contentType === "video" ? "" : `_${String(mediaIndex + 1).padStart(2, "0")}`;
@@ -146,14 +150,15 @@ async function archive({ items, date, keyword }) {
           errors.push(`「${title}」媒体下载失败：${error.message || "未知原因"}`);
         }
       }
-      for (let audioIndex = 0; detail.contentType === "image" && audioIndex < detail.audio.length; audioIndex += 1) {
+      for (let audioIndex = 0; downloadAudio && audioIndex < detail.audio.length; audioIndex += 1) {
         const audio = detail.audio[audioIndex];
         try {
-          await downloadFile({ url: audio, filename: `${folder}/${fileTitle}_配乐_${String(audioIndex + 1).padStart(2, "0")}${extension(audio, "audio")}`, conflictAction: "uniquify", saveAs: false }, `${index + 1}/${items.length}「${title}」配乐 ${audioIndex + 1}/${detail.audio.length}`);
+          const audioLabel = isVideo ? "音频" : "配乐";
+          await downloadFile({ url: audio, filename: `${folder}/${fileTitle}_${audioLabel}_${String(audioIndex + 1).padStart(2, "0")}${extension(audio, "audio")}`, conflictAction: "uniquify", saveAs: false }, `${index + 1}/${items.length}「${title}」${audioLabel} ${audioIndex + 1}/${detail.audio.length}`);
           downloaded += 1;
         } catch (error) {
           failed += 1;
-          errors.push(`「${title}」配乐下载失败：${error.message || "未知原因"}`);
+          errors.push(`「${title}」${isVideo ? "音频" : "配乐"}下载失败：${error.message || "未知原因"}`);
         }
       }
     } catch (error) {
